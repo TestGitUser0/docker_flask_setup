@@ -1,172 +1,93 @@
 ---
-- name: Set up Flask App with Gunicorn and Nginx on AlmaLinux
+- name: Full Docker-based Flask App Deployment on AlmaLinux
   hosts: SecondVM
+  become: yes
 
   vars:
     app_dir: /opt/flaskapp
-    venv_dir: /opt/flaskapp/venv
-    app_repo_url: "https://github.com/TestGitUser0/flask_setup.git"
-    app_entry: "app.app:app"
+    image_name: flaskapp:latest
+    container_name: flask-container
 
   tasks:
-    - name: update
-      command: yum -y update
-      become: yes
-
-    - name: Install system packages
+    - name: Install required tools
       dnf:
         name:
-          - python3
-          - python3-pip
-          - nginx
-          - git
+          - yum-utils
+          - device-mapper-persistent-data
+          - lvm2
         state: present
-      become: yes
 
-    - name: Check if pip3 is available
-      command: pip3 --version
-      register: pip_check
-      changed_when: false
+    - name: Add Docker repository
+      get_url:
+        url: https://download.docker.com/linux/centos/docker-ce.repo
+        dest: /etc/yum.repos.d/docker-ce.repo
 
-    - name: Debug pip3 version
-      debug:
-        msg: "pip3 version: {{ pip_check.stdout }}"
+    - name: Install Docker engine
+      dnf:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+        state: latest
 
-    - name: Find pip3 location
-      command: which pip3
-      register: pip3_path
-      changed_when: false
+    - name: Enable and start Docker service
+      systemd:
+        name: docker
+        enabled: true
+        state: started
 
-    - name: Install virtualenv using dynamically found pip3
-      pip:
-        name: virtualenv
-        executable: "{{ pip3_path.stdout }}"
-      become: yes
+    - name: Ensure docker group exists
+      group:
+        name: docker
+        state: present
+
+    - name: Add remote user to docker group
+      user:
+        name: "{{ ansible_user }}"
+        groups: docker
+        append: yes
+      ignore_errors: true  # Jenkinsからroot以外でSSHするなら
 
     - name: Create application directory
       file:
         path: "{{ app_dir }}"
         state: directory
-        owner: nginx
-        group: nginx
+
+    - name: Copy Flask app files
+      copy:
+        src: "{{ playbook_dir }}/flask"
+        dest: "{{ app_dir }}/"
         mode: '0755'
-      become: yes
 
-    - name: Add /opt/flaskapp to Git's safe directory list
-      command: git config --global --add safe.directory /opt/flaskapp
-      become: yes
-      ignore_errors: yes
-
-    - name: Clone Flask application repo
-      git:
-        repo: "{{ app_repo_url }}"
-        dest: "{{ app_dir }}"
-        version: main
-        force: yes
-      become: yes
-
-    - name: Find python3 location
-      command: which python3
-      register: python3_path
-      changed_when: false
-
-    - name: Debug python3 path
-      debug:
-        msg: "python3 is located at: {{ python3_path.stdout }}"
-
-    - name: Create virtual environment
-      command: "{{ python3_path.stdout }} -m venv {{ venv_dir }}"
-      args:
-        creates: "{{ venv_dir }}/bin/activate"
-      become: yes
-
-    - name: Copy requirements.txt manually
+    - name: Copy requirements.txt
       copy:
         src: "{{ playbook_dir }}/requirements.txt"
         dest: "{{ app_dir }}/requirements.txt"
-      become: yes
 
-    - name: Install app requirements
-      pip:
-        requirements: "{{ app_dir }}/requirements.txt"
-        virtualenv: "{{ venv_dir }}"
-      become: yes
-
-    - name: Create Gunicorn systemd service
+    - name: Copy Dockerfile
       copy:
-        dest: /etc/systemd/system/gunicorn.service
-        content: |
-          [Unit]
-          Description=Gunicorn daemon for Flask app
-          After=network.target
+        src: "{{ playbook_dir }}/Dockerfile"
+        dest: "{{ app_dir }}/Dockerfile"
 
-          [Service]
-          User=nginx
-          Group=nginx
-          WorkingDirectory=/opt/flaskapp/flask
-          ExecStart=/opt/flaskapp/venv/bin/gunicorn --workers 3 --bind unix:/opt/flaskapp/flaskapp.sock {{ app_entry }}
+    - name: Build Docker image
+      community.docker.docker_image:
+        name: "{{ image_name }}"
+        source: build
+        build:
+          path: "{{ app_dir }}"
 
-          [Install]
-          WantedBy=multi-user.target
-      become: yes
-      notify: reload systemd
-
-    - name: Trigger systemd daemon-reload
-      systemd:
-        daemon_reload: yes
-      become: yes
-      when: "'/etc/systemd/system/gunicorn.service' is exists"
-
-    - name: Start and enable Gunicorn
-      systemd:
-        name: gunicorn
-        enabled: yes
-        state: started
-      become: yes
-
-    - name: Set permissions for Gunicorn socket file  # Gunicorn 起動後
-      file:
-        path: "{{ app_dir }}/flaskapp.sock"
-        owner: nginx
-        group: nginx
-        mode: "0660"
-      become: yes
-      when: "'/opt/flaskapp/flaskapp.sock' is exists" # ファイルが存在する場合のみ実行
-
-    - name: Configure Nginx reverse proxy
-      copy:
-        dest: /etc/nginx/conf.d/flaskapp.conf
-        content: |
-          server {
-            listen 80;
-            server_name _;
-
-            location / {
-              proxy_pass http://unix:{{ app_dir }}/flaskapp.sock;
-              proxy_set_header Host $host;
-              proxy_set_header X-Real-IP $remote_addr;
-              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-              proxy_set_header X-Forwarded-Proto $scheme;
-            }
-          }
-      become: yes
-
-    - name: Remove default nginx config if exists
-      file:
-        path: /etc/nginx/conf.d/default.conf
+    - name: Stop and remove existing container
+      community.docker.docker_container:
+        name: "{{ container_name }}"
         state: absent
-      become: yes
-      ignore_errors: true
+      ignore_errors: yes
 
-    - name: Restart and enable nginx
-      systemd:
-        name: nginx
-        state: restarted
-        enabled: yes
-      become: yes
+    - name: Run new Flask container
+      community.docker.docker_container:
+        name: "{{ container_name }}"
+        image: "{{ image_name }}"
+        state: started
+        restart_policy: always
+        ports:
+          - "80:5000"
 
-  handlers:
-    - name: reload systemd
-      systemd:
-        daemon_reload: yes
-      become: yes

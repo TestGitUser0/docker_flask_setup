@@ -11,7 +11,7 @@ pipeline{
         stage("Clone Repo"){
             steps {
                 sh 'git clone https://github.com/TestGitUser0/flask_setup.git'
-            }
+           }
         }
         stage("Build"){
             steps {
