@@ -8,10 +8,11 @@
         name: podman-docker
         state: absent
 
-    - name: Add Docker CE repo for RHEL8 (AlmaLinux9対応)
+    - name: Add Docker CE repo for RHEL9 (AlmaLinux9対応)
       ansible.builtin.get_url:
-        url: https://download.docker.com/linux/centos/8/x86_64/stable/docker-ce.repo
+        url: https://download.docker.com/linux/rhel/9/x86_64/stable/docker-ce.repo
         dest: /etc/yum.repos.d/docker-ce.repo
+        mode: '0644'
 
     - name: Install required system packages
       ansible.builtin.dnf:
@@ -26,12 +27,6 @@
         allowerasing: true
 
   tasks:
-    - name: Enable docker.socket
-      ansible.builtin.systemd:
-        name: docker.socket
-        enabled: true
-        state: started
-
     - name: Enable and start docker service
       ansible.builtin.systemd:
         name: docker
@@ -45,7 +40,7 @@
         append: yes
       when: ansible_user != "root"
 
-    - name: Restart docker after group change
+    - name: Restart docker after group change (optional)
       ansible.builtin.systemd:
         name: docker
         state: restarted
