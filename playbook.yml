@@ -1,5 +1,5 @@
 - name: Install and start Docker on AlmaLinux 9
-  hosts: secondVM
+  hosts: SecondVM
   become: yes
 
   pre_tasks:
