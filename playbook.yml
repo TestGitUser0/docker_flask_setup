@@ -17,14 +17,22 @@
         name: podman-docker
         state: absent
 
+    - name: Add Docker CE repo for RHEL9
+      ansible.builtin.get_url:
+        url: https://download.docker.com/linux/centos/9/x86_64/stable/docker-ce.repo
+        dest: /etc/yum.repos.d/docker-ce.repo
+
     - name: Install required system packages
-      dnf:
+      ansible.builtin.dnf:
         name:
           - python3
           - python3-pip
-          - docker
           - git
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
         state: present
+        allowerasing: true
 
     - name: Install Docker Python SDK
       pip:
