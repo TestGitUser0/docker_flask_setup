@@ -1,93 +1,73 @@
 ---
-- name: Full Docker-based Flask App Deployment on AlmaLinux
+- name: Deploy Flask App via Docker
   hosts: SecondVM
   become: yes
 
   vars:
+    docker_image_name: flask-app
+    docker_container_name: flask-container
     app_dir: /opt/flaskapp
-    image_name: flaskapp:latest
-    container_name: flask-container
+    repo_url: "https://github.com/TestGitUser0/flask_setup.git"
+    exposed_port: 80
+    container_port: 5000
 
-  tasks:
-    - name: Install required tools
+  pre_tasks:
+    - name: Install required system packages
       dnf:
         name:
-          - yum-utils
-          - device-mapper-persistent-data
-          - lvm2
+          - python3
+          - python3-pip
+          - docker
+          - git
         state: present
 
-    - name: Add Docker repository
-      get_url:
-        url: https://download.docker.com/linux/centos/docker-ce.repo
-        dest: /etc/yum.repos.d/docker-ce.repo
+    - name: Install Docker Python SDK
+      pip:
+        name: docker
+        executable: pip3
 
-    - name: Install Docker engine
-      dnf:
-        name:
-          - docker-ce
-          - docker-ce-cli
-          - containerd.io
-        state: latest
-
-    - name: Enable and start Docker service
+    - name: Start and enable Docker service
       systemd:
         name: docker
-        enabled: true
         state: started
+        enabled: true
 
-    - name: Ensure docker group exists
-      group:
-        name: docker
-        state: present
+    - name: Install community.docker collection
+      ansible.builtin.ansible_galaxy_collection:
+        name: community.docker
 
-    - name: Add remote user to docker group
-      user:
-        name: "{{ ansible_user }}"
-        groups: docker
-        append: yes
-      ignore_errors: true  # Jenkinsからroot以外でSSHするなら
-
-    - name: Create application directory
+  tasks:
+    - name: Ensure app directory exists
       file:
         path: "{{ app_dir }}"
         state: directory
 
-    - name: Copy Flask app files
-      copy:
-        src: "{{ playbook_dir }}/flask"
-        dest: "{{ app_dir }}/"
-        mode: '0755'
-
-    - name: Copy requirements.txt
-      copy:
-        src: "{{ playbook_dir }}/requirements.txt"
-        dest: "{{ app_dir }}/requirements.txt"
-
-    - name: Copy Dockerfile
-      copy:
-        src: "{{ playbook_dir }}/Dockerfile"
-        dest: "{{ app_dir }}/Dockerfile"
+    - name: Clone the Flask repo
+      git:
+        repo: "{{ repo_url }}"
+        dest: "{{ app_dir }}"
+        version: test_docker
+        force: yes
 
     - name: Build Docker image
       community.docker.docker_image:
-        name: "{{ image_name }}"
-        source: build
+        name: "{{ docker_image_name }}"
         build:
           path: "{{ app_dir }}"
+        source: build
 
-    - name: Stop and remove existing container
+    - name: Remove old container if exists
       community.docker.docker_container:
-        name: "{{ container_name }}"
+        name: "{{ docker_container_name }}"
         state: absent
-      ignore_errors: yes
+        force_kill: true
 
     - name: Run new Flask container
       community.docker.docker_container:
-        name: "{{ container_name }}"
-        image: "{{ image_name }}"
+        name: "{{ docker_container_name }}"
+        image: "{{ docker_image_name }}"
         state: started
         restart_policy: always
-        ports:
-          - "80:5000"
+        published_ports:
+          - "{{ exposed_port }}:{{ container_port }}"
 
