@@ -32,9 +32,10 @@
         state: started
         enabled: true
 
-    - name: Install community.docker collection
-      ansible.builtin.ansible_galaxy_collection:
-        name: community.docker
+    - name: Ensure community.docker collection is installed
+      ansible.builtin.shell: ansible-galaxy collection install community.docker
+      args:
+        creates: ~/.ansible/collections/ansible_collections/community/docker
 
   tasks:
     - name: Ensure app directory exists
