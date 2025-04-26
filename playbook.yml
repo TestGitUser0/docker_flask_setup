@@ -8,11 +8,16 @@
         name: podman-docker
         state: absent
 
-    - name: Add Docker CE repo for RHEL9 (AlmaLinux9対応)
-      ansible.builtin.get_url:
-        url: https://download.docker.com/linux/rhel/9/x86_64/stable/docker-ce.repo
-        dest: /etc/yum.repos.d/docker-ce.repo
-        mode: '0644'
+    - name: Install dnf-plugins-core (リポジトリ追加用)
+      ansible.builtin.dnf:
+        name: dnf-plugins-core
+        state: present
+
+    - name: Add Docker CE repository manually
+      ansible.builtin.command:
+        cmd: dnf config-manager --add-repo https://download.docker.com/linux/centos/7/x86_64/stable
+      args:
+        creates: /etc/yum.repos.d/docker-ce.repo
 
     - name: Install required system packages
       ansible.builtin.dnf:
