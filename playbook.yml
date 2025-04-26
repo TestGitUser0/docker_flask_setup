@@ -1,15 +1,6 @@
----
-- name: Deploy Flask App via Docker
-  hosts: SecondVM
+- name: Install and start Docker on AlmaLinux 9
+  hosts: secondVM
   become: yes
-
-  vars:
-    docker_image_name: flask-app
-    docker_container_name: flask-container
-    app_dir: /opt/flaskapp
-    repo_url: "https://github.com/TestGitUser0/flask_setup.git"
-    exposed_port: 80
-    container_port: 5000
 
   pre_tasks:
     - name: Remove podman-docker if installed
@@ -17,9 +8,9 @@
         name: podman-docker
         state: absent
 
-    - name: Add Docker CE repo for RHEL9
+    - name: Add Docker CE repo for RHEL8 (AlmaLinux9対応)
       ansible.builtin.get_url:
-        url: https://download.docker.com/linux/centos/9/x86_64/stable/docker-ce.repo
+        url: https://download.docker.com/linux/centos/8/x86_64/stable/docker-ce.repo
         dest: /etc/yum.repos.d/docker-ce.repo
 
     - name: Install required system packages
@@ -34,54 +25,29 @@
         state: present
         allowerasing: true
 
-    - name: Install Docker Python SDK
-      pip:
-        name: docker
-        executable: pip3
-
-    - name: Start and enable Docker service
-      systemd:
-        name: docker
-        state: started
-        enabled: true
-
-    - name: Ensure community.docker collection is installed
-      ansible.builtin.shell: ansible-galaxy collection install community.docker
-      args:
-        creates: ~/.ansible/collections/ansible_collections/community/docker
-
   tasks:
-    - name: Ensure app directory exists
-      file:
-        path: "{{ app_dir }}"
-        state: directory
-
-    - name: Clone the Flask repo
-      git:
-        repo: "{{ repo_url }}"
-        dest: "{{ app_dir }}"
-        version: test_docker
-        force: yes
-
-    - name: Build Docker image
-      community.docker.docker_image:
-        name: "{{ docker_image_name }}"
-        build:
-          path: "{{ app_dir }}"
-        source: build
-
-    - name: Remove old container if exists
-      community.docker.docker_container:
-        name: "{{ docker_container_name }}"
-        state: absent
-        force_kill: true
-
-    - name: Run new Flask container
-      community.docker.docker_container:
-        name: "{{ docker_container_name }}"
-        image: "{{ docker_image_name }}"
+    - name: Enable docker.socket
+      ansible.builtin.systemd:
+        name: docker.socket
+        enabled: true
         state: started
-        restart_policy: always
-        published_ports:
-          - "{{ exposed_port }}:{{ container_port }}"
+
+    - name: Enable and start docker service
+      ansible.builtin.systemd:
+        name: docker
+        enabled: true
+        state: started
+
+    - name: Add current user to docker group (optional)
+      ansible.builtin.user:
+        name: "{{ ansible_user }}"
+        groups: docker
+        append: yes
+      when: ansible_user != "root"
+
+    - name: Restart docker after group change
+      ansible.builtin.systemd:
+        name: docker
+        state: restarted
+      when: ansible_user != "root"
 
