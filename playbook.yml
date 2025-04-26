@@ -12,6 +12,11 @@
     container_port: 5000
 
   pre_tasks:
+    - name: Remove podman-docker if installed
+      ansible.builtin.dnf:
+        name: podman-docker
+        state: absent
+
     - name: Install required system packages
       dnf:
         name:
