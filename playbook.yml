@@ -1,6 +1,9 @@
-- name: Install and start Docker on AlmaLinux 9
+- name: Install Docker and deploy Flask app on AlmaLinux 9
   hosts: SecondVM
   become: yes
+
+  vars:
+    app_root: /srv/flaskapp
 
   pre_tasks:
     - name: Remove podman-docker if installed
@@ -8,7 +11,7 @@
         name: podman-docker
         state: absent
 
-    - name: Install dnf-plugins-core (リポジトリ追加用)
+    - name: Install dnf-plugins-core (for repository management)
       ansible.builtin.dnf:
         name: dnf-plugins-core
         state: present
@@ -50,4 +53,57 @@
         name: docker
         state: restarted
       when: ansible_user != "root"
+
+    # ここからアプリ関連
+    - name: Create application directories
+      ansible.builtin.file:
+        path: "{{ app_root }}/{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+      loop:
+        - myapp
+        - myapp/app
+
+    - name: Create __init__.py files
+      ansible.builtin.copy:
+        dest: "{{ app_root }}/{{ item }}/__init__.py"
+        content: ""
+        owner: root
+        group: root
+        mode: '0644'
+      loop:
+        - myapp
+        - myapp/app
+
+    - name: Copy application files
+      ansible.builtin.copy:
+        src: "{{ item.src }}"
+        dest: "{{ app_root }}/{{ item.dest }}"
+        owner: root
+        group: root
+        mode: '0644'
+      loop:
+        - { src: 'Dockerfile', dest: 'Dockerfile' }
+        - { src: 'requirements.txt', dest: 'requirements.txt' }
+        - { src: 'nginx_flask.conf', dest: 'myapp/nginx_flask.conf' }
+        - { src: 'app.py', dest: 'myapp/app/app.py' }
+
+    - name: Build Docker image
+      community.docker.docker_image:
+        name: flaskapp
+        source: build
+        build:
+          path: "{{ app_root }}"
+        tag: latest
+
+    - name: Run Docker container
+      community.docker.docker_container:
+        name: flaskapp
+        image: flaskapp:latest
+        state: started
+        restart_policy: always
+        ports:
+          - "8080:8080"
 
