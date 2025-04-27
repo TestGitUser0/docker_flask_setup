@@ -78,17 +78,13 @@
         - myapp/app
 
     - name: Copy application files
-      ansible.builtin.copy:
+      copy:
         src: "{{ item.src }}"
-        dest: "{{ app_root }}/{{ item.dest }}"
-        owner: root
-        group: root
-        mode: '0644'
-      loop:
+        dest: "/srv/flaskapp/{{ item.dest }}"
+      with_items:
         - { src: 'Dockerfile', dest: 'Dockerfile' }
         - { src: 'requirements.txt', dest: 'requirements.txt' }
-        - { src: 'nginx_flask.conf', dest: 'myapp/nginx_flask.conf' }
-        - { src: 'app.py', dest: 'myapp/app/app.py' }
+        - { src: 'flask/app/app.py', dest: 'myapp/app/app.py' }
 
     - name: Build Docker image
       community.docker.docker_image:
