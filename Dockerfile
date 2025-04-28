@@ -10,5 +10,5 @@ COPY . .
 # ここ追加！！！
 ENV PYTHONPATH=/app
 
-CMD ["gunicorn", "-b", "0.0.0.0:8080", "flask.app.app:app"]
+CMD ["gunicorn", "-b", "0.0.0.0:8080", "myapp.app:app"]
 
