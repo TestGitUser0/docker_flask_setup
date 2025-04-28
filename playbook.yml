@@ -3,7 +3,7 @@
   become: yes
 
   vars:
-    app_root: /opt/docker_flask_setup  # クローン先
+    app_root: /srv/flaskapp
 
   pre_tasks:
     - name: Remove podman-docker if installed
@@ -16,19 +16,14 @@
         name: dnf-plugins-core
         state: present
 
-
-    - name: Add Docker CE official repo for AlmaLinux 9
-      ansible.builtin.get_url:
-        url: https://download.docker.com/linux/centos/docker-ce.repo
-        dest: /etc/yum.repos.d/docker-ce.repo
-        mode: '0644'
-
-    - name: Replace $releasever with 9
-      ansible.builtin.replace:
-        path: /etc/yum.repos.d/docker-ce.repo
-        regexp: '\$releasever'
-        replace: '9'
-
+    - name: Add Docker CE repository (for AlmaLinux 9)
+      ansible.builtin.yum_repository:
+        name: docker-ce
+        description: Docker CE Stable Repository
+        baseurl: https://download.docker.com/linux/centos/9/x86_64/stable/
+        gpgcheck: yes
+        gpgkey: https://download.docker.com/linux/centos/gpg
+        enabled: yes
 
     - name: Install required system packages
       ansible.builtin.dnf:
@@ -63,13 +58,35 @@
       when: ansible_user != "root"
 
     # ここからアプリ関連
-    - name: Clone Flask app repository
-      ansible.builtin.git:
-        repo: 'https://github.com/TestGitUser0/docker_flask_setup.git'
-        dest: "{{ app_root }}"
-        update: yes
+    - name: Create application directory
+      ansible.builtin.file:
+        path: "{{ app_root }}/myapp"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
 
-    - name: Build Docker image for Flask app
+    - name: Create __init__.py inside myapp
+      ansible.builtin.copy:
+        dest: "{{ app_root }}/myapp/__init__.py"
+        content: ""
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Copy application files
+      ansible.builtin.copy:
+        src: "{{ item.src }}"
+        dest: "{{ app_root }}/{{ item.dest }}"
+        owner: root
+        group: root
+        mode: '0644'
+      loop:
+        - { src: 'Dockerfile', dest: 'Dockerfile' }
+        - { src: 'requirements.txt', dest: 'requirements.txt' }
+        - { src: 'flask/app/app.py', dest: 'myapp/app.py' }
+
+    - name: Build Docker image
       community.docker.docker_image:
         name: flaskapp
         source: build
@@ -77,13 +94,7 @@
           path: "{{ app_root }}"
         tag: latest
 
-    - name: Stop and remove existing container if exists
-      community.docker.docker_container:
-        name: flaskapp
-        state: absent
-        force_kill: true
-
-    - name: Run Flask app container
+    - name: Run Docker container
       community.docker.docker_container:
         name: flaskapp
         image: flaskapp:latest
