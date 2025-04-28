@@ -16,7 +16,7 @@ pipeline{
         }
         stage("Build"){
             steps {
-                dir('flask_setup') {
+                dir('docker_flask_setup') {
                     sh 'ansible-playbook -i inventory playbook.yml'
                 }
             }
