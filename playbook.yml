@@ -3,7 +3,7 @@
   become: yes
 
   vars:
-    app_root: /srv/flaskapp
+    app_root: /opt/docker_flask_setup  # クローン先
 
   pre_tasks:
     - name: Remove podman-docker if installed
@@ -55,38 +55,13 @@
       when: ansible_user != "root"
 
     # ここからアプリ関連
-    - name: Create application directories
-      ansible.builtin.file:
-        path: "{{ app_root }}/{{ item }}"
-        state: directory
-        owner: root
-        group: root
-        mode: '0755'
-      loop:
-        - myapp
-        - myapp/app
+    - name: Clone Flask app repository
+      ansible.builtin.git:
+        repo: 'https://github.com/TestGitUser0/docker_flask_setup.git'
+        dest: "{{ app_root }}"
+        update: yes
 
-    - name: Create __init__.py files
-      ansible.builtin.copy:
-        dest: "{{ app_root }}/{{ item }}/__init__.py"
-        content: ""
-        owner: root
-        group: root
-        mode: '0644'
-      loop:
-        - myapp
-        - myapp/app
-
-    - name: Copy application files
-      copy:
-        src: "{{ item.src }}"
-        dest: "/srv/flaskapp/{{ item.dest }}"
-      with_items:
-        - { src: 'Dockerfile', dest: 'Dockerfile' }
-        - { src: 'requirements.txt', dest: 'requirements.txt' }
-        - { src: 'flask/app/app.py', dest: 'myapp/app/app.py' }
-
-    - name: Build Docker image
+    - name: Build Docker image for Flask app
       community.docker.docker_image:
         name: flaskapp
         source: build
@@ -94,7 +69,13 @@
           path: "{{ app_root }}"
         tag: latest
 
-    - name: Run Docker container
+    - name: Stop and remove existing container if exists
+      community.docker.docker_container:
+        name: flaskapp
+        state: absent
+        force_kill: true
+
+    - name: Run Flask app container
       community.docker.docker_container:
         name: flaskapp
         image: flaskapp:latest
