@@ -7,6 +7,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# GunicornでFlaskを起動（Python開発サーバーは使わない）
-CMD ["gunicorn", "-b", "0.0.0.0:8080", "app.app:app"]
+# ここ追加！！！
+ENV PYTHONPATH=/app
+
+CMD ["gunicorn", "-b", "0.0.0.0:8080", "flask.app.app:app"]
 
