@@ -16,11 +16,19 @@
         name: dnf-plugins-core
         state: present
 
-    - name: Add Docker CE repository manually
-      ansible.builtin.command:
-        cmd: dnf config-manager --add-repo https://download.docker.com/linux/centos/7/x86_64/stable
-      args:
-        creates: /etc/yum.repos.d/docker-ce.repo
+
+    - name: Add Docker CE official repo for AlmaLinux 9
+      ansible.builtin.get_url:
+        url: https://download.docker.com/linux/centos/docker-ce.repo
+        dest: /etc/yum.repos.d/docker-ce.repo
+        mode: '0644'
+
+    - name: Replace $releasever with 9
+      ansible.builtin.replace:
+        path: /etc/yum.repos.d/docker-ce.repo
+        regexp: '\$releasever'
+        replace: '9'
+
 
     - name: Install required system packages
       ansible.builtin.dnf:
