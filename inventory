@@ -1,2 +1,2 @@
-SecondVM ansible_host=192.168.0.221 ansible_user=Alma ansible_ssh_private_key_file=~/.ssh/id_rsa
+SecondVM ansible_host=192.168.0.229 ansible_user=Alma ansible_ssh_private_key_file=~/.ssh/id_rsa
 

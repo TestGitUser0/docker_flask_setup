@@ -11,7 +11,7 @@ pipeline{
         stage("Clone Repo"){
             steps {
                 sh 'rm -rf flask_setup'
-                sh 'git clone https://github.com/TestGitUser0/docker_flask_setup.git'
+                sh 'git clone -b test https://github.com/TestGitUser0/docker_flask_setup.git'
            }
         }
         stage("Build"){
